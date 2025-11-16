@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.10.35122.118
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "dxf-ext", "dxf-ext\dxf-ext.csproj", "{906113E8-3754-4A23-B0EB-10102440706B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{906113E8-3754-4A23-B0EB-10102440706B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{906113E8-3754-4A23-B0EB-10102440706B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{906113E8-3754-4A23-B0EB-10102440706B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{906113E8-3754-4A23-B0EB-10102440706B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {3B3E28CD-2708-4DC0-8DC1-11FAF919FD99}
+	EndGlobalSection
+EndGlobal

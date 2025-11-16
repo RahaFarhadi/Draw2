@@ -1,0 +1,44 @@
+{
+  "columns": [
+    {
+      "col": "رديف",
+      "attr": "",
+      "source": "auto_index"
+    },
+    {
+      "col": "کدسیم",
+      "attr": "WireCode",
+      "source": "attribute"
+    },
+    {
+      "col": "رنگ سيم",
+      "attr": "COLOR",
+      "source": "attribute"
+    },
+    {
+      "col": "سايزسيم",
+      "attr": "Size",
+      "source": "attribute"
+    },
+    {
+      "col": "نوع سيم",
+      "attr": "Type",
+      "source": "attribute"
+    },
+    {
+      "col": "طول برش سيم",
+      "attr": "CutLength",
+      "source": "attribute"
+    },
+    {
+      "col": "ابتدا",
+      "attr": "Start",
+      "source": "attribute"
+    },
+    {
+      "col": "انتها",
+      "attr": "End",
+      "source": "attribute"
+    }
+  ]
+}
