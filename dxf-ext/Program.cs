@@ -94,7 +94,7 @@ public static void Main(string[] args)
         return;
     }
 
-    Console.WriteLine($"✅ DXF loaded. Entities: {document.Entities.Count}");
+    Console.WriteLine($"✅ DXF loaded. Entities: {document.Entities.All.Count()}");
 
     List<Dictionary<string, string>> rows = ExtractUsingAttributes(document, mapping).ToList();
     if (rows.Count == 0)
@@ -148,7 +148,7 @@ private static IEnumerable<Dictionary<string, string>> ExtractUsingAttributes(Dx
     var orderedHeaders = CutterHeaders.ToDictionary(h => h, h => string.Empty, StringComparer.OrdinalIgnoreCase);
     int autoIndex = 1;
 
-    foreach (Insert insert in document.Entities.OfType<Insert>())
+    foreach (Insert insert in document.Entities.All.OfType<Insert>())
     {
         if (insert.Attributes.Count == 0)
         {
@@ -319,7 +319,7 @@ private static List<TextFragment> GetTextFragments(DxfDocument document)
 {
     var fragments = new List<TextFragment>();
 
-    foreach (Text text in document.Entities.OfType<Text>())
+    foreach (Text text in document.Entities.All.OfType<Text>())
     {
         string value = text.Value?.Trim() ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(value))
@@ -328,7 +328,7 @@ private static List<TextFragment> GetTextFragments(DxfDocument document)
         }
     }
 
-    foreach (MText mText in document.Entities.OfType<MText>())
+    foreach (MText mText in document.Entities.All.OfType<MText>())
     {
         string cleaned = CleanMText(mText.Value);
         if (!string.IsNullOrWhiteSpace(cleaned))
