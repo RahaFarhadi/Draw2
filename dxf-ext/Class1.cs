@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using netDxf;
 using System;
 using System.IO;
@@ -157,7 +158,20 @@ private static IEnumerable<string> Tokenize(string candidate)
 private static void WriteOutput(string outputPath, IReadOnlyCollection<string> codes)
 {
     Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
-    File.WriteAllLines(outputPath, codes);
+    using var workbook = new XLWorkbook();
+    var worksheet = workbook.Worksheets.Add("WireCodes");
+    worksheet.Cell(1, 1).Value = "Wire Code";
+    worksheet.Cell(1, 1).Style.Font.Bold = true;
+
+    var currentRow = 2;
+    foreach (var code in codes)
+    {
+        worksheet.Cell(currentRow, 1).Value = code;
+        currentRow++;
+    }
+
+    worksheet.Columns().AdjustToContents();
+    workbook.SaveAs(outputPath);
 }
     }
 }
