@@ -1,0 +1,146 @@
+using netDxf;
+using netDxf.Entities;
+using ClosedXML.Excel;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+
+public class WireExtractor
+{
+    private const string FilePath = @"c:\tmp\test2-a.dxf";
+    private const string OutputPath = @"c:\tmp\wire_codes.xlsx";
+    private const double Tolerance = 40.0;
+
+    private static readonly HashSet<string> ValidWireCodes = new HashSet<string>
+    {
+        "6071","6211","6208","813","8431","8423","720","E720","6061","E22A","E22B",
+        "6411","6412","8430","8422","6217","620","6410","2334"
+    };
+
+    private class WireInfo
+    {
+        public string Code { get; set; }
+        public double Length { get; set; }
+    }
+
+    public static void Extract()
+    {
+        var doc = DxfDocument.Load(FilePath);
+
+        var wires = new List<EntityObject>();
+        wires.AddRange(doc.Entities.Lines);
+        wires.AddRange(doc.Entities.Polylines2D);
+
+        var texts = new List<(string Value, Vector3 Pos)>();
+        foreach (var t in doc.Entities.Texts)
+            texts.Add((t.Value.Trim().ToUpper(), t.Position));
+        foreach (var mt in doc.Entities.MTexts)
+            texts.Add((CleanMText(mt.Value), mt.Position));
+
+        var results = new List<WireInfo>();
+
+        foreach (var wire in wires)
+        {
+            Vector3 center = GetWireCenter(wire);
+            double length = GetWireLength(wire);
+
+            var nearest = texts
+                .Where(t => ValidWireCodes.Contains(t.Value))
+                .OrderBy(t => Distance2D(center.X, center.Y, t.Pos.X, t.Pos.Y))
+                .FirstOrDefault();
+
+            if (!string.IsNullOrEmpty(nearest.Value))
+            {
+                results.Add(new WireInfo
+                {
+                    Code = nearest.Value,
+                    Length = length
+                });
+            }
+        }
+
+        // خروجی Excel
+        var wb = new XLWorkbook();
+        var ws = wb.Worksheets.Add("WireCodes");
+
+        ws.Cell(1, 1).Value = "Code";
+        ws.Cell(1, 2).Value = "Length";
+
+        int row = 2;
+        foreach (var r in results)
+        {
+            ws.Cell(row, 1).Value = r.Code;
+            ws.Cell(row, 2).Value = r.Length;
+            row++;
+        }
+
+        wb.SaveAs(OutputPath);
+        Console.WriteLine($"✅ Excel file generated: {OutputPath}");
+    }
+
+    private static string CleanMText(string raw)
+    {
+        // حذف فرمت‌های اضافی از MText
+        var match = Regex.Match(raw, @"\\H\d+(\.\d+)?x;([A-Z0-9]+)");
+        return match.Success ? match.Groups[2].Value.Trim().ToUpper() : raw.Trim().ToUpper();
+    }
+
+    private static double Distance2D(double x1, double y1, double x2, double y2)
+    {
+        double dx = x1 - x2;
+        double dy = y1 - y2;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    private static Vector3 GetWireCenter(EntityObject wire)
+    {
+        if (wire is Line line)
+        {
+            return new Vector3(
+                (line.StartPoint.X + line.EndPoint.X) / 2.0,
+                (line.StartPoint.Y + line.EndPoint.Y) / 2.0,
+                0.0
+            );
+        }
+        else if (wire is Polyline2D pl2 && pl2.Vertexes.Count > 0)
+        {
+            double sumX = 0, sumY = 0;
+            foreach (var v in pl2.Vertexes)
+            {
+                sumX += v.Position.X;
+                sumY += v.Position.Y;
+            }
+            return new Vector3(sumX / pl2.Vertexes.Count, sumY / pl2.Vertexes.Count, 0.0);
+        }
+
+        return new Vector3(0, 0, 0);
+    }
+
+    private static double GetWireLength(EntityObject wire)
+    {
+        if (wire is Line line)
+        {
+            return Distance2D(line.StartPoint.X, line.StartPoint.Y, line.EndPoint.X, line.EndPoint.Y);
+        }
+        else if (wire is Polyline2D pl2)
+        {
+            double length = 0.0;
+            for (int i = 0; i < pl2.Vertexes.Count - 1; i++)
+            {
+                var a = pl2.Vertexes[i].Position;
+                var b = pl2.Vertexes[i + 1].Position;
+                length += Distance2D(a.X, a.Y, b.X, b.Y);
+            }
+            if (pl2.IsClosed && pl2.Vertexes.Count > 1)
+            {
+                var first = pl2.Vertexes[0].Position;
+                var last = pl2.Vertexes[^1].Position;
+                length += Distance2D(first.X, first.Y, last.X, last.Y);
+            }
+            return length;
+        }
+
+        return 0.0;
+    }
+}
