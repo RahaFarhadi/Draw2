@@ -1,0 +1,202 @@
+using netDxf;
+using netDxf.Blocks;
+using netDxf.Tables;
+using netDxf.Entities;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+
+public class DxfWireDataExtractor
+{
+    // --- File Path Settings ---
+    private const string FilePath = @"c:\tmp\test2-a.dxf";
+    private const string OutputPath = @"c:\tmp\wire_data_final_output.csv";
+
+    private static readonly Dictionary<string, string> LayerToColumnMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        {"TEXT_WIRE_CODE", "کد سیم (code)"},
+        {"TEXT_WIRE_COLOR", "رنگ سیم (color)"},
+        {"TEXT_WIRE_SIZE", "سایز سیم (size)"},
+        {"TEXT_WIRE_LENGTH", "طول برش سیم (length)"}
+    };
+
+    private const double ProximityTolerance = 5.0;
+
+    private class TextData
+    {
+        public string Layer { get; set; }
+        public string Value { get; set; }
+        public Vector3 Position { get; set; }
+    }
+
+    public static void ExtractAndGroupWireData()
+    {
+        // 1. بارگذاری فایل DXF
+        try { Console.OutputEncoding = Encoding.UTF8; } catch { }
+        Console.WriteLine($"\n--- Starting Final Extraction ---");
+        if (!File.Exists(FilePath)) { Console.WriteLine($"\n❌ ERROR: DXF file not found at {FilePath}."); return; }
+
+        DxfDocument doc;
+        try
+        {
+            doc = DxfDocument.Load((string)FilePath);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\n❌ FATAL ERROR loading DXF: {ex.Message}");
+            return;
+        }
+
+        // 2. استخراج داده‌های متنی (هم از Entities و هم از Block ها)
+        var rawData = new List<TextData>();
+        var targetLayers = new HashSet<string>(LayerToColumnMap.Keys, StringComparer.OrdinalIgnoreCase);
+        var dataPattern = new Regex(@"(\w+)|(\d)", RegexOptions.Compiled);
+
+        // --- متد کمکی برای استخراج متن از یک مجموعه موجودیت ---
+        void ExtractTextEntities(IEnumerable<netDxf.Entities.EntityObject> entities, Vector3 offset)
+        {
+            foreach (var entity in entities)
+            {
+                string value = "";
+                Vector3 position = new Vector3();
+
+                string layerName = entity.Layer.Name.Trim();
+
+                if (entity is netDxf.Entities.Text text)
+                {
+                    value = text.Value;
+                    position = text.Position + offset;
+                }
+                else if (entity is netDxf.Entities.MText mtext)
+                {
+                    value = mtext.Value;
+                    position = mtext.Position + offset;
+                }
+                else continue; // این خط انواع دیگر (مانند Ellipses، Lines، Points و...) را حذف می‌کند
+
+                if (!string.IsNullOrWhiteSpace(value) && targetLayers.Contains(layerName) && dataPattern.IsMatch(value.Trim()))
+                {
+                    string cleanedValue = value.Replace('\n', ' ').Replace('\r', ' ').Trim();
+                    rawData.Add(new TextData { Layer = layerName, Value = cleanedValue, Position = position });
+                }
+            }
+        }
+
+        // A. استخراج متون از فضای مدل (ModelSpace)
+        // این عبارت فقط Text و MText را استخراج می‌کند و سایر موجودیت‌ها را نادیده می‌گیرد.
+        var modelSpaceTextEntities = doc
+            .OfType<netDxf.Entities.EntityObject>() // این مطمئن می‌کند که ما با EntityObject کار می‌کنیم
+            .Where(e => e is netDxf.Entities.Text || e is netDxf.Entities.MText)
+            .ToList();
+
+        ExtractTextEntities(modelSpaceTextEntities, new Vector3(0, 0, 0));
+
+
+        //// B. استخراج متون از Block References (برای متون پنهان)
+        //// مستقیماً BlockReferenceها را از کل مجموعه موجودیت‌ها استخراج می‌کنیم.
+        var blockReferences = doc.Entities.OfType<BlockReference>().ToList();
+
+        foreach (var blockRef in blockReferences)
+        {
+            if (blockRef.Block != null && blockRef.Block.Entities != null)
+            {
+                // فیلتر کردن موجودیت‌های متنی داخل بلوک و تبدیل به EntityObject
+                var blockEntities = blockRef.Block.Entities
+                    .OfType<netDxf.Entities.EntityObject>() // این مطمئن می‌کند که ما با EntityObject کار می‌کنیم
+                    .Where(e => e is netDxf.Entities.Text || e is netDxf.Entities.MText)
+                    .ToList();
+                ExtractTextEntities(blockEntities, blockRef.Position);
+            }
+        }
+
+        Console.WriteLine($"\nFound {rawData.Count} relevant text entities in target layers.");
+
+        // 3. گروه‌بندی داده‌ها بر اساس مجاورت
+        var groupedWires = GroupByProximity(rawData, ProximityTolerance);
+        Console.WriteLine($"Grouped into {groupedWires.Count} potential wires.");
+
+        // 4. تولید خروجی CSV
+        var csvContent = new StringBuilder();
+        string header = string.Join(",", LayerToColumnMap.Values);
+        csvContent.AppendLine(header);
+
+        int exportedRowCount = 0;
+
+        foreach (var group in groupedWires)
+        {
+            var wireData = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var dataPoint in group)
+            {
+                if (LayerToColumnMap.ContainsKey(dataPoint.Layer))
+                {
+                    string finalValue = dataPoint.Value.Replace(",", ";").Trim();
+                    wireData[dataPoint.Layer] = finalValue;
+                }
+            }
+
+            var rowValues = new List<string>();
+            foreach (var layerKey in LayerToColumnMap.Keys)
+            {
+                string value = wireData.ContainsKey(layerKey) ? wireData[layerKey] : "";
+                rowValues.Add(value);
+            }
+
+            if (rowValues.Any(v => !string.IsNullOrEmpty(v)))
+            {
+                csvContent.AppendLine(string.Join(",", rowValues));
+                exportedRowCount++;
+            }
+        }
+
+        // 5. ذخیره فایل
+        try
+        {
+            File.WriteAllText(OutputPath, csvContent.ToString(), Encoding.UTF8);
+            Console.WriteLine($"\n✅ SUCCESS. Final CSV file generated.");
+            Console.WriteLine($"Total wire records exported: {exportedRowCount}");
+            Console.WriteLine($"Output file saved to: {OutputPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"\n❌ ERROR writing CSV file: {ex.Message}");
+        }
+    }
+
+    private static List<List<TextData>> GroupByProximity(List<TextData> data, double tolerance)
+    {
+        if (data == null || data.Count == 0) return new List<List<TextData>>();
+
+        var sortedData = data.OrderBy(d => d.Position.Y).ThenBy(d => d.Position.X).ToList();
+        var groups = new List<List<TextData>>();
+        var assigned = new bool[sortedData.Count];
+
+        for (int i = 0; i < sortedData.Count; i++)
+        {
+            if (assigned[i]) continue;
+
+            var currentGroup = new List<TextData> { sortedData[i] };
+            assigned[i] = true;
+
+            for (int j = i + 1; j < sortedData.Count; j++)
+            {
+                if (assigned[j]) continue;
+
+                double distance = Math.Sqrt(Math.Pow(sortedData[i].Position.X - sortedData[j].Position.X, 2) +
+                                            Math.Pow(sortedData[i].Position.Y - sortedData[j].Position.Y, 2));
+
+                if (distance <= tolerance)
+                {
+                    currentGroup.Add(sortedData[j]);
+                    assigned[j] = true;
+                }
+            }
+            groups.Add(currentGroup);
+        }
+
+        return groups;
+    }
+}
